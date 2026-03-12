@@ -2,7 +2,7 @@
 # 2025-09-30 Arya Vijayan
 import pathlib, pandas as pd, geopandas as gpd
 
-ROOT   = pathlib.Path(__file__).resolve().parents[1]
+ROOT   = pathlib.Path(__file__).resolve().parents[2]
 CSV_Q  = ROOT/"data"/"input"/"discharge"/"monitored_mean_Q.csv"
 CATCH  = ROOT/"data"/"input"/"shapefiles"/"catchment"/"bsdbs.shp"
 

@@ -4,8 +4,8 @@ from rasterio.features import rasterize
 import geopandas as gpd
 from shapely.ops import unary_union
 
-from modflow_setup import setup_and_run_modflow, load_or_interpolate_obs_heads
-from calibration_with_figures import plot_head_maps  # reuse your plotting
+from core.modflow_setup import setup_and_run_modflow, load_or_interpolate_obs_heads
+from calibration.calibration_with_figures import plot_head_maps  # reuse your plotting
 
 def run_validation(catch_id, calib_year, years_to_validate, mf6_exe):
     # load calibrated multipliers

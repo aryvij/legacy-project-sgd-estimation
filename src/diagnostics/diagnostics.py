@@ -55,7 +55,7 @@ from scipy.ndimage import distance_transform_edt
 
 # Optional import: we only need this if you want CV using your same well→grid logic
 try:
-    from sgd_utils import interpolate_well_heads
+    from core.sgd_utils import interpolate_well_heads
     HAS_SGD_UTILS = True
 except Exception:
     HAS_SGD_UTILS = False

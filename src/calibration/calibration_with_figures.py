@@ -31,10 +31,10 @@ import csv
 from rasterio.features import rasterize
 
 # Your modules
-from modflow_setup import setup_and_run_modflow, load_or_interpolate_obs_heads
-import sgd_utils
-import modflow_setup as mfs
-from sgd_utils import interpolate_well_heads
+from core.modflow_setup import setup_and_run_modflow, load_or_interpolate_obs_heads
+from core import sgd_utils
+from core import modflow_setup as mfs
+from core.sgd_utils import interpolate_well_heads
 from matplotlib.ticker import ScalarFormatter
 
 
@@ -1139,7 +1139,7 @@ def main():
 
     # --- ALWAYS extract SGD (independent of --no-figures) ---
     try:
-        from sgd_post import extract_sgd_from_cbc
+        from diagnostics.sgd_post import extract_sgd_from_cbc
         base_ws = os.path.join(filepaths['output'], f"model_runs/mf6_{catch_id}")
         sgd_csv = os.path.join(filepaths['output'], "sgd_summary.csv")
         res = extract_sgd_from_cbc(base_ws, catchment=catch_id, year=year, out_csv=sgd_csv)

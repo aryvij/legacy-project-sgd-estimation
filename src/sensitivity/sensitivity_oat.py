@@ -30,9 +30,9 @@ import geopandas as gpd
 import rasterio
 from rasterio.features import rasterize
 
-from modflow_setup import setup_and_run_modflow, load_or_interpolate_obs_heads
+from core.modflow_setup import setup_and_run_modflow, load_or_interpolate_obs_heads
 
-ROOT   = pathlib.Path(__file__).resolve().parents[1]
+ROOT   = pathlib.Path(__file__).resolve().parents[2]
 DATA   = ROOT / "data"
 INPUT  = DATA / "input"
 OUTPUT = DATA / "output"

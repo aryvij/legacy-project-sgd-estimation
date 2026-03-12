@@ -33,7 +33,7 @@ print("[modflow_setup] rasterize ref:", inspect.getsource(rasterize)[:60], "..."
 
 
 # Utility functions imported from sgd_utils
-from sgd_utils import (
+from core.sgd_utils import (
     load_and_mask_raster,
     resample_to_target,
     interpolate_well_heads,

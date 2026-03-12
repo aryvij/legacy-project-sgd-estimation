@@ -22,7 +22,7 @@
 
 ```powershell
 cd scripts
-python src/main_sgd.py --catchment 204 --year 2010 --mf6 "path/to/mf6.exe"
+python -m src.core.main_sgd --catchment 204 --year 2010 --mf6 "path/to/mf6.exe"
 ```
 
 This will:
@@ -37,47 +37,52 @@ This will:
 ```
 scripts/
 ├── README.md              ← you are here
+├── .gitignore
 └── src/
     ├── __init__.py
     │
-    ├── CORE ──────────────────────────────────────────────────
-    ├── main_sgd.py             ← CLI entry point
-    ├── modflow_setup.py        ← builds & runs MODFLOW-6 model
-    ├── flow_estimator.py       ← discharge lookup (monitored Q or regression)
-    ├── sgd_utils.py            ← shared utilities (raster I/O, well interpolation, masks)
+    ├── core/                       ← CORE MODULES
+    │   ├── __init__.py
+    │   ├── main_sgd.py             ← CLI entry point
+    │   ├── modflow_setup.py        ← builds & runs MODFLOW-6 model
+    │   ├── flow_estimator.py       ← discharge lookup (monitored Q or regression)
+    │   └── sgd_utils.py            ← shared utilities (raster I/O, well interpolation, masks)
     │
-    ├── CALIBRATION & VALIDATION ──────────────────────────────
-    ├── calibration_with_figures.py  ← 5-multiplier calibration (scipy.optimize + plots)
-    ├── validation.py                ← forward-run on unseen years
+    ├── calibration/                ← CALIBRATION & VALIDATION
+    │   ├── __init__.py
+    │   ├── calibration_with_figures.py  ← 5-multiplier calibration (scipy.optimize + plots)
+    │   └── validation.py               ← forward-run on unseen years
     │
-    ├── DIAGNOSTICS ───────────────────────────────────────────
-    ├── diagnostics.py          ← RMSE, scatter, QQ, stratified residuals
-    ├── analyze_residuals.py    ← residual binning by elevation/distance
-    ├── sgd_post.py             ← extract SGD (m³/day) from MODFLOW budget
+    ├── diagnostics/                ← DIAGNOSTICS
+    │   ├── __init__.py
+    │   ├── diagnostics.py          ← RMSE, scatter, QQ, stratified residuals
+    │   ├── analyze_residuals.py    ← residual binning by elevation/distance
+    │   └── sgd_post.py             ← extract SGD (m³/day) from MODFLOW budget
     │
-    ├── SENSITIVITY & UNCERTAINTY ─────────────────────────────
-    ├── sensitivity_oat.py      ← one-at-a-time perturbation analysis
-    ├── sensitivity_sobol.py    ← global Sobol sensitivity (SALib)
-    ├── uncertainty_mc.py       ← Monte Carlo parameter ensemble
+    ├── sensitivity/                ← SENSITIVITY & UNCERTAINTY
+    │   ├── __init__.py
+    │   ├── sensitivity_oat.py      ← one-at-a-time perturbation analysis
+    │   ├── sensitivity_sobol.py    ← global Sobol sensitivity (SALib)
+    │   └── uncertainty_mc.py       ← Monte Carlo parameter ensemble
     │
-    ├── PLOTTING ──────────────────────────────────────────────
-    ├── plot_oat_results.py        ← OAT bar/line plots
-    ├── plot_sobol_dual.py         ← dual-panel Sobol index charts
-    ├── plot_uncertainty_violin.py ← MC ensemble violin plots
+    ├── plotting/                   ← POST-PROCESSING PLOTS
+    │   ├── __init__.py
+    │   ├── plot_oat_results.py        ← OAT bar/line plots
+    │   ├── plot_sobol_dual.py         ← dual-panel Sobol index charts
+    │   └── plot_uncertainty_violin.py ← MC ensemble violin plots
     │
-    ├── UI ────────────────────────────────────────────────────
-    ├── interface_main_sgd.py   ← Streamlit web interface
+    ├── interface_main_sgd.py       ← Streamlit web interface
     │
-    ├── DOCS ──────────────────────────────────────────────────
-    ├── Calibration of MODFLOW-6 Model for SGD.md
+    ├── docs/                       ← DOCUMENTATION
+    │   └── Calibration of MODFLOW-6 Model for SGD.md
     │
-    ├── Preprocessing/          ← one-time data preparation
+    ├── Preprocessing/              ← one-time data preparation
     │   ├── clipping_coast_line.py
     │   ├── discharge_data_mean_calculation.py
     │   ├── soil_dept_data_preprocess.py
     │   └── year_selection.py
     │
-    └── visualisation/          ← standalone visualization helpers
+    └── visualisation/              ← standalone visualization helpers
         ├── calibration_2010_rmse_fromcsv.py
         ├── check_masks.py
         ├── ghb_riv_flux_SWIM.py
@@ -134,7 +139,7 @@ Additional spatial zoning:
 - **Soil-class recharge factors:** {1: 0.80, 2: 1.10, 3: 1.05}
 
 ```powershell
-python src/calibration_with_figures.py --catchment 204 --year 2010 --mf6 "path/to/mf6.exe" --maxiter 50
+python -m src.calibration.calibration_with_figures --catchment 204 --year 2010 --mf6 "path/to/mf6.exe" --maxiter 50
 ```
 
 ---
@@ -144,7 +149,7 @@ python src/calibration_with_figures.py --catchment 204 --year 2010 --mf6 "path/t
 SGD is extracted as **GHB outflows** (negative q in the cell-budget file):
 
 ```powershell
-python src/sgd_post.py --cbc "data/output/model_runs/mf6_204/gwf_204.cbc"
+python -m src.diagnostics.sgd_post --cbc "data/output/model_runs/mf6_204/gwf_204.cbc"
 ```
 
 ---
@@ -176,7 +181,7 @@ All input data lives outside this repository under `data/` (not version-controll
 
 1. **Caching:** Expensive raster ops are cached under `data/output/cache/<catchment_id>/`. Delete the cache folder if input data changes. Set `FORCE_RECHARGE_REBUILD=1` to force recharge recalculation.
 
-2. **MODFLOW 6 path:** Update the `--mf6` argument or change the default in `main_sgd.py` line 63.
+2. **MODFLOW 6 path:** Update the `--mf6` argument or change the default in `core/main_sgd.py`.
 
 3. **Layer geometry:** L1 bottom is clamped so it never goes below −49.9 m (L2 bottom is −50 m constant). The Newton solver handles wetting/drying in L1.
 
@@ -188,13 +193,13 @@ All input data lives outside this repository under `data/` (not version-controll
 
 | Task | Command |
 |------|---------|
-| **Simulation** | `python src/main_sgd.py --catchment 204 --year 2010 --mf6 "path/to/mf6.exe"` |
-| **Calibration** | `python src/calibration_with_figures.py --catchment 204 --year 2010 --mf6 "..." --maxiter 50` |
-| **Validation** | `python src/validation.py --catchment 204 --calib-year 2010 --years 2018 2019 --mf6 "..."` |
-| **Sensitivity (OAT)** | `python src/sensitivity_oat.py --catchment 204 --year 2010 --mf6 "..."` |
-| **Sensitivity (Sobol)** | `python src/sensitivity_sobol.py --catchment 204 --year 2010 --mf6 "..."` |
-| **Uncertainty (MC)** | `python src/uncertainty_mc.py --catchment 204 --year 2010 --mf6 "..."` |
-| **SGD extraction** | `python src/sgd_post.py --cbc "data/output/model_runs/mf6_204/gwf_204.cbc"` |
+| **Simulation** | `python -m src.core.main_sgd --catchment 204 --year 2010 --mf6 "path/to/mf6.exe"` |
+| **Calibration** | `python -m src.calibration.calibration_with_figures --catchment 204 --year 2010 --mf6 "..." --maxiter 50` |
+| **Validation** | `python -m src.calibration.validation --catchment 204 --calib-year 2010 --years 2018 2019 --mf6 "..."` |
+| **Sensitivity (OAT)** | `python -m src.sensitivity.sensitivity_oat --catchment 204 --year 2010 --mf6 "..."` |
+| **Sensitivity (Sobol)** | `python -m src.sensitivity.sensitivity_sobol --catchment 204 --year 2010 --mf6 "..."` |
+| **Uncertainty (MC)** | `python -m src.sensitivity.uncertainty_mc --catchment 204 --year 2010 --mf6 "..."` |
+| **SGD extraction** | `python -m src.diagnostics.sgd_post --cbc "data/output/model_runs/mf6_204/gwf_204.cbc"` |
 | **Web UI** | `streamlit run src/interface_main_sgd.py` |
 
 ---

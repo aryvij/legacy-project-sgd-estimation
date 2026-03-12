@@ -32,11 +32,11 @@ import geopandas as gpd
 import numpy as np
 import json
 
-from flow_estimator import get_mean_discharge
-from modflow_setup import setup_and_run_modflow
+from core.flow_estimator import get_mean_discharge
+from core.modflow_setup import setup_and_run_modflow
 
 # Project directories
-ROOT    = pathlib.Path(__file__).resolve().parents[1]
+ROOT    = pathlib.Path(__file__).resolve().parents[2]
 DATA    = ROOT / "data"
 INPUT   = DATA / "input"
 OUTPUT  = DATA / "output"

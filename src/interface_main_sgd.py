@@ -10,8 +10,9 @@ import matplotlib.pyplot as plt
 import streamlit as st
 
 # --- your app code ---
-import main_sgd
-from main_sgd import get_mean_discharge, is_coastal, setup_and_run_modflow
+from core import main_sgd
+from core.main_sgd import get_mean_discharge, is_coastal
+from core.modflow_setup import setup_and_run_modflow
 
 ROOT   = pathlib.Path(__file__).resolve().parents[1]
 DATA   = ROOT / "data"
