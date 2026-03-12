@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Data (too large for git)
+data/
+
+# MODFLOW output
+*.hds
+*.cbc
+*.lst
+*.ims
+model_runs/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# OneDrive artifacts
+~$*
+*.tmp
