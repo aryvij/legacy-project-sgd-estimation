@@ -32,10 +32,9 @@ from rasterio.features import rasterize
 
 from core.modflow_setup import setup_and_run_modflow, load_or_interpolate_obs_heads
 
-ROOT   = pathlib.Path(__file__).resolve().parents[2]
-DATA   = ROOT / "data"
-INPUT  = DATA / "input"
-OUTPUT = DATA / "output"
+_DEFAULT_ROOT = pathlib.Path(__file__).resolve().parents[2]
+_DEFAULT_INPUT  = _DEFAULT_ROOT / "data" / "input"
+_DEFAULT_OUTPUT = _DEFAULT_ROOT / "data" / "output"
 
 def cache_dir(filepaths, catchment_id: int, year: int) -> str:
     """Per-run cache folder (safe to delete)."""
@@ -135,8 +134,18 @@ def main():
     ap.add_argument("--params", required=True, help="Path to calibrated params JSON")
     ap.add_argument("--deltas", default="-0.2,-0.1,0.1,0.2",
                     help="Comma-separated fractional changes, e.g. -0.2,-0.1,0,0.1,0.2")
-    ap.add_argument("--outdir", default=str(OUTPUT), help="Output folder")
+    ap.add_argument("--outdir", default=None, help="Output folder (default: <output-dir>)")
+    ap.add_argument("--data-root", type=str, default=None,
+                    help="Path to input data folder (default: <project>/data/input)")
+    ap.add_argument("--output-dir", type=str, default=None,
+                    help="Path to output folder (default: <project>/data/output)")
     args = ap.parse_args()
+
+    INPUT  = pathlib.Path(args.data_root)  if args.data_root  else _DEFAULT_INPUT
+    OUTPUT = pathlib.Path(args.output_dir) if args.output_dir else _DEFAULT_OUTPUT
+    DATA   = OUTPUT.parent
+    if args.outdir is None:
+        args.outdir = str(OUTPUT)
 
     with open(args.params, "r") as f:
         pcal = json.load(f)
@@ -154,7 +163,7 @@ def main():
     filepaths = {
         "dem"         : INPUT / "dem" / "elevation_sweden.tif",
         "catchment"   : INPUT / "shapefiles" / "catchment" / "bsdbs.shp",
-        "recharge"    : DATA  / "output" / "recharge_yearly" / f"recharge_egdi_gldas_{args.year}.tif",
+        "recharge"    : OUTPUT / "recharge_yearly" / f"recharge_egdi_gldas_{args.year}.tif",
         "soil_perm"   : INPUT / "aquifer_data" / "genomslapplighet" / "genomslapplighet.gpkg",
         "soil_depth"  : INPUT / "aquifer_data" / "jorddjupsmodell" / "jorddjupsmodell_10x10m.tif",
         "conductivity": INPUT / "other_rasters" / "hydraulic_conductivity.tif",

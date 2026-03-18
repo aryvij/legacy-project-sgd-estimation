@@ -35,43 +35,51 @@ import json
 from core.flow_estimator import get_mean_discharge
 from core.modflow_setup import setup_and_run_modflow
 
-# Project directories
-ROOT    = pathlib.Path(__file__).resolve().parents[2]
-DATA    = ROOT / "data"
-INPUT   = DATA / "input"
-OUTPUT  = DATA / "output"
-
-# Shapefiles and rasters
-COAST_CHECK  = INPUT / "shapefiles/coastline_check/coastal_boundary.shp"
-CATCH_SHP    = INPUT / "shapefiles/catchment/bsdbs.shp"
-COAST_FOR_MF = INPUT / "shapefiles/coast_line/coastline.shp"
-
-# Aquifer & conductivity datasets
-SOIL_PERM    = INPUT / "aquifer_data" / "genomslapplighet" / "genomslapplighet.gpkg"
-BEDROCK_K    = INPUT / "other_rasters" / "hydraulic_conductivity.tif"  # log10(K) raster
-
-# Surface water shapefiles
-RIVERS_SHP   = INPUT / "shapefiles" / "surface_water" / "Surface_water" /"hl_riks.shp" 
-LAKES_SHP    = INPUT / "shapefiles" / "surface_water" / "scandinavian_waters_polygons" / "scandinavian_waters_polygons.shp"
+# Default project directories (used when no CLI overrides are given)
+_DEFAULT_ROOT = pathlib.Path(__file__).resolve().parents[2]
+_DEFAULT_INPUT  = _DEFAULT_ROOT / "data" / "input"
+_DEFAULT_OUTPUT = _DEFAULT_ROOT / "data" / "output"
 
 
-def is_coastal(cid: str|int, buffer_m: float = 50.0) -> bool:
-    cats = gpd.read_file(CATCH_SHP)[["ID_BSDB","geometry"]]
+def is_coastal(cid: str|int, catch_shp=None, coast_check_shp=None, buffer_m: float = 50.0) -> bool:
+    if catch_shp is None:
+        catch_shp = _DEFAULT_INPUT / "shapefiles/catchment/bsdbs.shp"
+    if coast_check_shp is None:
+        coast_check_shp = _DEFAULT_INPUT / "shapefiles/coastline_check/coastal_boundary.shp"
+    cats = gpd.read_file(catch_shp)[["ID_BSDB","geometry"]]
     poly = cats.loc[cats.ID_BSDB == int(cid), "geometry"].squeeze()
     if poly is None:
         raise ValueError(f"Catchment {cid} not found")
-    coast = gpd.read_file(COAST_CHECK)
+    coast = gpd.read_file(coast_check_shp)
     if coast.crs != cats.crs:
         coast = coast.to_crs(cats.crs)
     coast_buf = coast.buffer(buffer_m)
     return coast_buf.unary_union.intersects(poly)
 
 
+def main():
     parser = argparse.ArgumentParser(description="Driver for coastal SGD workflow")
     parser.add_argument("--catchment", type=int, help="Catchment ID (ID_BSDB)")
     parser.add_argument("--year", type=int, help="Year for simulation")
     parser.add_argument("--mf6", type=str, default=r"C:\Users\aryapv\AppData\Local\Programs\mf6.6.1_win64\bin\mf6.exe", help="Path to MODFLOW 6 executable")
+    parser.add_argument("--data-root", type=str, default=None,
+                        help="Path to the input data folder (default: <project>/data/input)")
+    parser.add_argument("--output-dir", type=str, default=None,
+                        help="Path to the output folder (default: <project>/data/output)")
     args = parser.parse_args()
+
+    # Resolve data paths from CLI or defaults
+    INPUT  = pathlib.Path(args.data_root) if args.data_root else _DEFAULT_INPUT
+    OUTPUT = pathlib.Path(args.output_dir) if args.output_dir else _DEFAULT_OUTPUT
+
+    # Shapefiles and rasters (derived from INPUT)
+    COAST_CHECK  = INPUT / "shapefiles/coastline_check/coastal_boundary.shp"
+    CATCH_SHP    = INPUT / "shapefiles/catchment/bsdbs.shp"
+    COAST_FOR_MF = INPUT / "shapefiles/coast_line/coastline.shp"
+    SOIL_PERM    = INPUT / "aquifer_data" / "genomslapplighet" / "genomslapplighet.gpkg"
+    BEDROCK_K    = INPUT / "other_rasters" / "hydraulic_conductivity.tif"
+    RIVERS_SHP   = INPUT / "shapefiles" / "surface_water" / "Surface_water" / "hl_riks.shp"
+    LAKES_SHP    = INPUT / "shapefiles" / "surface_water" / "scandinavian_waters_polygons" / "scandinavian_waters_polygons.shp"
 
     if args.catchment:
         cid = args.catchment
@@ -91,9 +99,9 @@ def is_coastal(cid: str|int, buffer_m: float = 50.0) -> bool:
             print("⚠ Invalid year or non-interactive mode detected.")
             sys.exit(1)
 
-    q, status = get_mean_discharge(cid)
+    q, status = get_mean_discharge(cid, data_root=INPUT)
 
-    if not is_coastal(cid):
+    if not is_coastal(cid, CATCH_SHP, COAST_CHECK):
         print("→ Inland basin – no SGD simulation required.")
         return
     print("→ Coastal basin – running MODFLOW-6 for SGD …")

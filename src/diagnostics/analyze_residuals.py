@@ -50,8 +50,8 @@ def binned_stats(residual, by, bins, labels):
         out.append([lab, int(m.sum()), float(np.nanmedian(r)), float(np.nanpercentile(r,10)), float(np.nanpercentile(r,90))])
     return pd.DataFrame(out, columns=["bin","n","median_res","p10_res","p90_res"])
 
-def main(catch_id, year):
-    base = "data/output"
+def main(catch_id, year, output_dir=None):
+    base = output_dir or "data/output"
     cache = os.path.join(base, "cache", str(catch_id))
     # Inputs you already produced
     sim_tif = os.path.join(base, f"best_sim_heads_c{catch_id}_y{year}.tif")
@@ -144,5 +144,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--catchment", type=int, required=True)
     ap.add_argument("--year", type=int, required=True)
+    ap.add_argument("--output-dir", type=str, default=None,
+                    help="Path to output folder (default: data/output)")
     args = ap.parse_args()
-    main(args.catchment, args.year)
+    main(args.catchment, args.year, output_dir=args.output_dir)

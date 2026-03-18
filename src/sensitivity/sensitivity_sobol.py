@@ -33,10 +33,9 @@ from rasterio.features import rasterize
 
 from core.modflow_setup import setup_and_run_modflow, load_or_interpolate_obs_heads
 
-ROOT   = pathlib.Path(__file__).resolve().parents[2]
-DATA   = ROOT / "data"
-INPUT  = DATA / "input"
-OUTPUT = DATA / "output"
+_DEFAULT_ROOT = pathlib.Path(__file__).resolve().parents[2]
+_DEFAULT_INPUT  = _DEFAULT_ROOT / "data" / "input"
+_DEFAULT_OUTPUT = _DEFAULT_ROOT / "data" / "output"
 
 # ------------------- utilities -------------------
 def polygon_mask(poly, shape, transform):
@@ -141,9 +140,18 @@ def main():
     ap.add_argument("--no-clean", action="store_true",
                     help="Do NOT delete workspace between runs (faster I/O; use only if MF6 overwrites cleanly)")
     ap.add_argument("--seed", type=int, default=12345, help="Random seed for Sobol sampler (if supported)")
-    ap.add_argument("--outdir", default=str(OUTPUT / "sensitivity_analysis"),
-                    help="Output folder for CSV/indices")
+    ap.add_argument("--outdir", default=None,
+                    help="Output folder for CSV/indices (default: <output-dir>/sensitivity_analysis)")
+    ap.add_argument("--data-root", type=str, default=None,
+                    help="Path to input data folder (default: <project>/data/input)")
+    ap.add_argument("--output-dir", type=str, default=None,
+                    help="Path to output folder (default: <project>/data/output)")
     args = ap.parse_args()
+
+    INPUT  = pathlib.Path(args.data_root)  if args.data_root  else _DEFAULT_INPUT
+    OUTPUT = pathlib.Path(args.output_dir) if args.output_dir else _DEFAULT_OUTPUT
+    if args.outdir is None:
+        args.outdir = str(OUTPUT / "sensitivity_analysis")
 
     # Validate / parse parameter list
     all_names = ["soilK","rockK","riv","ghb","rch"]
@@ -159,7 +167,7 @@ def main():
     filepaths = {
         "dem"         : INPUT / "dem" / "elevation_sweden.tif",
         "catchment"   : INPUT / "shapefiles" / "catchment" / "bsdbs.shp",
-        "recharge"    : DATA  / "output" / "recharge_yearly" / f"recharge_egdi_gldas_{args.year}.tif",
+        "recharge"    : OUTPUT / "recharge_yearly" / f"recharge_egdi_gldas_{args.year}.tif",
         "soil_perm"   : INPUT / "aquifer_data" / "genomslapplighet" / "genomslapplighet.gpkg",
         "soil_depth"  : INPUT / "aquifer_data" / "jorddjupsmodell" / "jorddjupsmodell_10x10m.tif",
         "conductivity": INPUT / "other_rasters" / "hydraulic_conductivity.tif",

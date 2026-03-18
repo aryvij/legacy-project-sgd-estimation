@@ -10,7 +10,6 @@ import matplotlib.pyplot as plt
 import streamlit as st
 
 # --- your app code ---
-from core import main_sgd
 from core.main_sgd import get_mean_discharge, is_coastal
 from core.modflow_setup import setup_and_run_modflow
 
@@ -81,16 +80,16 @@ def build_filepaths(
 ) -> dict:
     fp = {
         "dem"         : INPUT / "dem" / "elevation_sweden.tif",
-        "catchment"   : main_sgd.CATCH_SHP,
+        "catchment"   : INPUT / "shapefiles" / "catchment" / "bsdbs.shp",
         "recharge"    : OUTPUT / "recharge_yearly" / f"recharge_egdi_gldas_{year}.tif",
-        "soil_perm"   : main_sgd.SOIL_PERM,
+        "soil_perm"   : INPUT / "aquifer_data" / "genomslapplighet" / "genomslapplighet.gpkg",
         "soil_depth"  : INPUT / "aquifer_data" / "jorddjupsmodell" / "jorddjupsmodell_10x10m.tif",
-        "conductivity": main_sgd.BEDROCK_K,
+        "conductivity": INPUT / "other_rasters" / "hydraulic_conductivity.tif",
         "sea_level"   : INPUT / "sea_level" / "yearly_average_sea_level.csv",
-        "coast"       : main_sgd.COAST_FOR_MF,
+        "coast"       : INPUT / "shapefiles" / "coast_line" / "coastline.shp",
         "wells"       : INPUT / "well_data" / "brunnar.gpkg",
-        "rivers"      : main_sgd.RIVERS_SHP,
-        "lakes"       : main_sgd.LAKES_SHP,
+        "rivers"      : INPUT / "shapefiles" / "surface_water" / "Surface_water" / "hl_riks.shp",
+        "lakes"       : INPUT / "shapefiles" / "surface_water" / "scandinavian_waters_polygons" / "scandinavian_waters_polygons.shp",
         "output"      : OUTPUT,
     }
     if rch_override: fp["recharge"] = rch_override

@@ -20,6 +20,8 @@
 
 ### Run a simulation
 
+All scripts must be run from the `scripts/` directory using `python -m`:
+
 ```powershell
 cd scripts
 python -m src.core.main_sgd --catchment 204 --year 2010 --mf6 "path/to/mf6.exe"
@@ -29,6 +31,18 @@ This will:
 1. Check if catchment 204 is coastal (if inland, exits — no SGD)
 2. Build a two-layer MODFLOW-6 model (soil + fractured bedrock)
 3. Run the simulation and save head maps + budget files
+
+### Custom data paths
+
+By default, scripts look for input data at `scripts/data/input/` and write outputs to `scripts/data/output/`. If your data lives elsewhere, use `--data-root` and `--output-dir`:
+
+```powershell
+python -m src.core.main_sgd --catchment 204 --year 2010 --mf6 "path/to/mf6.exe" `
+  --data-root "C:\path\to\data\input" `
+  --output-dir "C:\path\to\data\output"
+```
+
+These two flags are available on **all** scripts (simulation, calibration, validation, sensitivity, uncertainty, diagnostics). When omitted, paths default to `<project>/data/input` and `<project>/data/output` relative to the repository.
 
 ---
 
@@ -74,7 +88,11 @@ scripts/
     ├── interface_main_sgd.py       ← Streamlit web interface
     │
     ├── docs/                       ← DOCUMENTATION
-    │   └── Calibration of MODFLOW-6 Model for SGD.md
+    │   ├── Calibration of MODFLOW-6 Model for SGD.md
+    │   ├── Phase_2A_Transient_Recharge_SGD.md
+    │   ├── Phase_2B_Nutrient_Data.md
+    │   ├── Phase_2C_Nutrient_Loads.md
+    │   └── Phase_2D_GWT_Transport.md
     │
     ├── Preprocessing/              ← one-time data preparation
     │   ├── clipping_coast_line.py
@@ -114,7 +132,14 @@ scripts/
 - **DRN** — rim drains (catchment edge) + interior drains (prevent unrealistic head build-up)
 
 ### Solver
-Newton with under-relaxation, BICGSTAB linear acceleration, 500 outer / 1000 inner iterations.
+Newton with under-relaxation (DBD), BICGSTAB linear acceleration, 200 outer / 500 inner iterations. Key convergence settings:
+- **Complexity:** MODERATE (enables internal damping heuristics)
+- **Under-relaxation theta:** 0.5 (applies 50% of each correction to prevent oscillation)
+- **Backtracking:** 20 steps (rolls back overshooting corrections)
+- **Convergence check:** after the run, `ims.csv` is parsed and a warning is printed if dvmax exceeds 10,000 m (indicates divergence)
+
+### Initial Heads
+Starting heads are set to DEM − 5 m (or from well interpolation where data exists). Coastal cells below 5 m elevation are clamped to at least sea level. This tight clamping helps Newton convergence — a poor initial guess can cause the solver to diverge.
 
 ### Stress Periods
 Pseudo-transient: SP1 = 30-day ramp (40% recharge), SP2 = 335-day run (100% recharge).
@@ -139,7 +164,8 @@ Additional spatial zoning:
 - **Soil-class recharge factors:** {1: 0.80, 2: 1.10, 3: 1.05}
 
 ```powershell
-python -m src.calibration.calibration_with_figures --catchment 204 --year 2010 --mf6 "path/to/mf6.exe" --maxiter 50
+python -m src.calibration.calibration_with_figures --catchment 204 --year 2010 --mf6 "path/to/mf6.exe" --maxiter 50 `
+  --data-root "path/to/data/input" --output-dir "path/to/data/output"
 ```
 
 ---
@@ -156,22 +182,23 @@ python -m src.diagnostics.sgd_post --cbc "data/output/model_runs/mf6_204/gwf_204
 
 ## Input Data
 
-All input data lives outside this repository under `data/` (not version-controlled due to size):
+Input data lives outside this repository (not version-controlled due to size). Point scripts to it with `--data-root` and `--output-dir`. Paths below are relative to the data root:
 
-| Dataset | Format | Source | Path |
-|---------|--------|--------|------|
-| DEM | GeoTIFF | Lantmäteriet | `data/input/dem/elevation_sweden.tif` |
-| Catchments | Shapefile | — | `data/input/shapefiles/catchment/bsdbs.shp` |
-| Coastline | Shapefile | — | `data/input/shapefiles/coast_line/coastline.shp` |
-| Soil permeability | GeoPackage | SGU | `data/input/aquifer_data/genomslapplighet/genomslapplighet.gpkg` |
-| Soil depth | GeoTIFF | SGU | `data/input/aquifer_data/jorddjupsmodell/jorddjupsmodell_10x10m.tif` |
-| Bedrock K | GeoTIFF | — | `data/input/other_rasters/hydraulic_conductivity.tif` |
-| Wells | GeoPackage | SGU | `data/input/well_data/brunnar.gpkg` |
-| Recharge (yearly) | GeoTIFF | EGDI/GLDAS | `data/output/recharge_yearly/recharge_egdi_gldas_<YEAR>.tif` |
-| Sea level | CSV | SMHI | `data/input/sea_level/yearly_average_sea_level.csv` |
-| Rivers | Shapefile | — | `data/input/shapefiles/surface_water/Surface_water/hl_riks.shp` |
-| Lakes | Shapefile | — | `data/input/shapefiles/surface_water/scandinavian_waters_polygons/` |
-| Discharge | CSV | SMHI | `data/input/discharge/monitored_mean_Q.csv` |
+| Dataset | Format | Source | Relative Path |
+|---------|--------|--------|---------------|
+| DEM | GeoTIFF | Lantmäteriet | `dem/elevation_sweden.tif` |
+| Catchments | Shapefile | — | `shapefiles/catchment/bsdbs.shp` |
+| Coastline | Shapefile | — | `shapefiles/coast_line/coastline.shp` |
+| Coastal boundary check | Shapefile | — | `shapefiles/coastline_check/coastal_boundary.shp` |
+| Soil permeability | GeoPackage | SGU | `aquifer_data/genomslapplighet/genomslapplighet.gpkg` |
+| Soil depth | GeoTIFF | SGU | `aquifer_data/jorddjupsmodell/jorddjupsmodell_10x10m.tif` |
+| Bedrock K | GeoTIFF | — | `other_rasters/hydraulic_conductivity.tif` |
+| Wells | GeoPackage | SGU | `well_data/brunnar.gpkg` |
+| Sea level | CSV | SMHI | `sea_level/yearly_average_sea_level.csv` |
+| Rivers | Shapefile | — | `shapefiles/surface_water/Surface_water/hl_riks.shp` |
+| Lakes | Shapefile | — | `shapefiles/surface_water/scandinavian_waters_polygons/` |
+| Discharge | CSV | SMHI | `discharge/monitored_mean_Q.csv` |
+| Recharge (yearly) | GeoTIFF | EGDI/GLDAS | *(output-dir)*: `recharge_yearly/recharge_egdi_gldas_<YEAR>.tif` |
 
 **CRS:** SWEREF99 TM (EPSG:3006) — all inputs are reprojected to match the DEM.
 
@@ -179,17 +206,23 @@ All input data lives outside this repository under `data/` (not version-controll
 
 ## Key Technical Notes
 
-1. **Caching:** Expensive raster ops are cached under `data/output/cache/<catchment_id>/`. Delete the cache folder if input data changes. Set `FORCE_RECHARGE_REBUILD=1` to force recharge recalculation.
+1. **Data paths:** All scripts accept `--data-root` (input data folder) and `--output-dir` (output folder). When omitted, paths default to `scripts/data/input` and `scripts/data/output` relative to the project root.
 
-2. **MODFLOW 6 path:** Update the `--mf6` argument or change the default in `core/main_sgd.py`.
+2. **Caching:** Expensive raster ops are cached under `<output-dir>/cache/<catchment_id>/`. Delete the cache folder if input data changes. Set `FORCE_RECHARGE_REBUILD=1` to force recharge recalculation.
 
-3. **Layer geometry:** L1 bottom is clamped so it never goes below −49.9 m (L2 bottom is −50 m constant). The Newton solver handles wetting/drying in L1.
+3. **MODFLOW 6 path:** Pass the path via `--mf6 "path/to/mf6.exe"`. Download from [USGS](https://www.usgs.gov/software/modflow-6-usgs-modular-hydrologic-model).
 
-4. **Soil permeability classes:** SGU genomsläpplighet classes 1–3 mapped to K: {1: 1e-8, 2: 1e-6, 3: 1e-5} m/s (converted to m/day internally).
+4. **Layer geometry:** L1 bottom is clamped so it never goes below −49.9 m (L2 bottom is −50 m constant). The Newton solver handles wetting/drying in L1.
+
+5. **Soil permeability classes:** SGU genomsläpplighet classes 1–3 mapped to K: {1: 1e-8, 2: 1e-6, 3: 1e-5} m/s (converted to m/day internally).
+
+6. **Running scripts:** Always run from the `scripts/` directory using `python -m src.<module>`. The `src/__init__.py` sets up `sys.path` so that internal `from core.…` imports resolve correctly.
 
 ---
 
 ## Command Reference
+
+All commands below should be run from the `scripts/` directory. Add `--data-root` and `--output-dir` to any command if your data is not at the default `scripts/data/` location.
 
 | Task | Command |
 |------|---------|
@@ -199,6 +232,7 @@ All input data lives outside this repository under `data/` (not version-controll
 | **Sensitivity (OAT)** | `python -m src.sensitivity.sensitivity_oat --catchment 204 --year 2010 --mf6 "..."` |
 | **Sensitivity (Sobol)** | `python -m src.sensitivity.sensitivity_sobol --catchment 204 --year 2010 --mf6 "..."` |
 | **Uncertainty (MC)** | `python -m src.sensitivity.uncertainty_mc --catchment 204 --year 2010 --mf6 "..."` |
+| **Diagnostics** | `python -m src.diagnostics.diagnostics --data-root "..." --output-dir "..."` |
 | **SGD extraction** | `python -m src.diagnostics.sgd_post --cbc "data/output/model_runs/mf6_204/gwf_204.cbc"` |
 | **Web UI** | `streamlit run src/interface_main_sgd.py` |
 

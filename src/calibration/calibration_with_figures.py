@@ -94,6 +94,10 @@ def parse_args():
     
     parser.add_argument('--no-grid-fallback', action='store_true',
                     help='Disable the expensive grid-search fallback')
+    parser.add_argument('--data-root', type=str, default=None,
+                        help='Path to the input data folder (default: data/input)')
+    parser.add_argument('--output-dir', type=str, default=None,
+                        help='Path to the output folder (default: data/output)')
 
 
     args = parser.parse_args()
@@ -615,24 +619,26 @@ def main():
         k_soil_factors   = args.k_soil_factors,
     )
       
+    INPUT_DIR  = args.data_root  if args.data_root  else 'data/input'
+    OUTPUT_DIR = args.output_dir if args.output_dir else 'data/output'
     filepaths = {
-        'dem':         'data/input/dem/elevation_sweden.tif',
-        'catchment':   'data/input/shapefiles/catchment/bsdbs.shp',
-        'recharge':    'data/input/recharge_data_selection_for_calibration.csv',
-        'soil_perm':   'data/input/aquifer_data/genomslapplighet/genomslapplighet.gpkg',
-        'soil_depth':  'data/input/aquifer_data/jorddjupsmodell/jorddjupsmodell_10x10m.tif',
-        'conductivity':'data/input/other_rasters/hydraulic_conductivity.tif',
-        'sea_level':   'data/input/sea_level/yearly_average_sea_level.csv',
-        'coast':       'data/input/shapefiles/coast_line/coastline.shp',
-        'wells':       'data/input/well_data/brunnar.gpkg',
-        'rivers':      'data/input/shapefiles/surface_water/Surface_water/hl_riks.shp',
-        'lakes':       'data/input/shapefiles/surface_water/scandinavian_waters_polygons.shp',
-        'output':      'data/output'
+        'dem':         os.path.join(INPUT_DIR, 'dem/elevation_sweden.tif'),
+        'catchment':   os.path.join(INPUT_DIR, 'shapefiles/catchment/bsdbs.shp'),
+        'recharge':    os.path.join(INPUT_DIR, 'recharge_data_selection_for_calibration.csv'),
+        'soil_perm':   os.path.join(INPUT_DIR, 'aquifer_data/genomslapplighet/genomslapplighet.gpkg'),
+        'soil_depth':  os.path.join(INPUT_DIR, 'aquifer_data/jorddjupsmodell/jorddjupsmodell_10x10m.tif'),
+        'conductivity':os.path.join(INPUT_DIR, 'other_rasters/hydraulic_conductivity.tif'),
+        'sea_level':   os.path.join(INPUT_DIR, 'sea_level/yearly_average_sea_level.csv'),
+        'coast':       os.path.join(INPUT_DIR, 'shapefiles/coast_line/coastline.shp'),
+        'wells':       os.path.join(INPUT_DIR, 'well_data/brunnar.gpkg'),
+        'rivers':      os.path.join(INPUT_DIR, 'shapefiles/surface_water/Surface_water/hl_riks.shp'),
+        'lakes':       os.path.join(INPUT_DIR, 'shapefiles/surface_water/scandinavian_waters_polygons.shp'),
+        'output':      OUTPUT_DIR
         
     }
     os.makedirs(filepaths['output'], exist_ok=True)
     # --- USE YEAR-SPECIFIC RECHARGE TIFs (m/day) ---
-    RECH_DIR = r"data/output/recharge_yearly"
+    RECH_DIR = os.path.join(OUTPUT_DIR, 'recharge_yearly')
     RECH_BASENAME = "recharge_egdi_gldas_{year}.tif"   # matches the writer script
     tif_path = os.path.join(RECH_DIR, RECH_BASENAME.format(year=year))
     if not os.path.exists(tif_path):
@@ -741,7 +747,7 @@ def main():
         dem_tr=dem_tr,
         dem_crs=dem_crs,
         model_shape=head0.shape,
-        cache_root="data/output/cache"
+        cache_root=os.path.join(OUTPUT_DIR, 'cache')
     )
     print("Patch check:",
           sgd_utils.interpolate_well_heads,

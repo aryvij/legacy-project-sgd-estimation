@@ -340,15 +340,21 @@ def main():
     p.add_argument("--catchment", type=int, required=True)
     p.add_argument("--year", type=int, required=True)
 
+    # data root overrides
+    p.add_argument("--data-root", type=str, default=None,
+                   help="Path to input data folder (default: data/input)")
+    p.add_argument("--output-dir", type=str, default=None,
+                   help="Path to output folder (default: data/output)")
+
     # paths (defaults mirror your repo layout)
     p.add_argument("--sim", default=None,
                    help="Path to best_sim_heads.tif (if None, built from ID/YEAR)")
     p.add_argument("--obs", default=None,
                    help="Path to observed_heads_clean.tif (if None, built from ID/YEAR)")
-    p.add_argument("--cache-root", default=os.path.join("data", "output", "cache"),
-                   help="Cache root where DEM/coast/river/soil rasters live")
+    p.add_argument("--cache-root", default=None,
+                   help="Cache root where DEM/coast/river/soil rasters live (default: <output-dir>/cache)")
     p.add_argument("--outdir", default=None,
-                   help="Where to save plots/stats (default: data/output/diagnostics_c{ID}_y{YEAR})")
+                   help="Where to save plots/stats (default: <output-dir>/diagnostics_c{ID}_y{YEAR})")
 
     # optional extras for stratification
     p.add_argument("--dem", default=None, help="DEM raster for elevation bins")
@@ -357,27 +363,32 @@ def main():
     p.add_argument("--river-mask", default=None, help="River cell mask raster (1 at river else 0)")
 
     # optional catchment polygon (safe to omit)
-    p.add_argument("--catchments-gpkg", default="data/input/vector/catchments.gpkg",
-                   help="Catchment polygons gpkg (optional)")
-    p.add_argument("--wells-gpkg", default="data/input/wells/wells.gpkg",
-                   help="Wells gpkg for CV (optional)")
+    p.add_argument("--catchments-gpkg", default=None,
+                   help="Catchment polygons gpkg (optional, default: <data-root>/vector/catchments.gpkg)")
+    p.add_argument("--wells-gpkg", default=None,
+                   help="Wells gpkg for CV (optional, default: <data-root>/wells/wells.gpkg)")
 
     args = p.parse_args()
     cid = args.catchment
     year = args.year
 
+    # Resolve base paths
+    input_dir  = args.data_root  or os.path.join("data", "input")
+    output_dir = args.output_dir or os.path.join("data", "output")
+
     # Resolve defaults based on ID/YEAR
     if args.sim is None:
-        sim_fp = os.path.join("data", "output", f"best_sim_heads_c{cid}_y{year}.tif")
+        sim_fp = os.path.join(output_dir, f"best_sim_heads_c{cid}_y{year}.tif")
     else:
         sim_fp = args.sim
 
     if args.obs is None:
-        obs_fp = os.path.join("data", "output", f"observed_heads_clean_c{cid}_y{year}.tif")
+        obs_fp = os.path.join(output_dir, f"observed_heads_clean_c{cid}_y{year}.tif")
     else:
         obs_fp = args.obs
 
-    cache_dir = os.path.join(args.cache_root, str(cid))
+    cache_root = args.cache_root or os.path.join(output_dir, "cache")
+    cache_dir = os.path.join(cache_root, str(cid))
     if args.dem is None:
         dem_fp = os.path.join(cache_dir, "dem_for_viz.tif")
     else:
@@ -398,7 +409,7 @@ def main():
     else:
         river_fp = args.river_mask
 
-    outdir = args.outdir or os.path.join("data", "output", f"diagnostics_c{cid}_y{year}")
+    outdir = args.outdir or os.path.join(output_dir, f"diagnostics_c{cid}_y{year}")
     ensure_dir(outdir)
 
     # Load heads

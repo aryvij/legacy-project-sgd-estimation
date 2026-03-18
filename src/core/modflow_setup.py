@@ -175,7 +175,8 @@ def setup_and_run_modflow(
     catch_poly = unary_union(sel.geometry)
 
     # ── Set up cache folder ────────────────────────────────────────────────
-    cache_dir = os.path.join(CACHE_ROOT, str(catchment_id))
+    cache_root = os.path.join(str(filepaths.get("output", "data/output")), "cache")
+    cache_dir = os.path.join(cache_root, str(catchment_id))
     os.makedirs(cache_dir, exist_ok=True)
 
     # 2) DEM: clip & cache
@@ -459,15 +460,18 @@ def setup_and_run_modflow(
         dem_crs
 )
     
-    # 6) Initial heads
+    # 6) Initial heads — start close to DEM to help Newton convergence
     print_time("Interpolating initial heads")
     h0 = interpolate_well_heads(filepaths['wells'], [catch_poly], dem.shape, dem_tr, dem_crs, dem, year=recharge_year)
     if h0 is None:
-        h0 = dem - 40.0
-    h0[np.isnan(h0)] = 0.98 * dem[np.isnan(h0)]
-    h0 = np.minimum(h0, dem + 2.0)   # max 5 m above ground
-    h0 = np.maximum(h0, dem - 50.0) # don’t go absurdly deep either
+        h0 = dem - 5.0   # conservative: water table 5 m below ground
+    h0[np.isnan(h0)] = dem[np.isnan(h0)] - 5.0   # ungauged cells: 5 m below DEM
+    h0 = np.minimum(h0, dem + 0.5)   # max 0.5 m above ground (artesian limit)
+    h0 = np.maximum(h0, dem - 50.0)  # don't go below rock bottom
+    # In coastal/low-lying cells, clamp head to at least sea level
+    h0 = np.where(dem < 5.0, np.maximum(h0, 0.0), h0)
     h0[~catch_mask] = np.nan
+    print(f"[init heads] min={np.nanmin(h0):.1f} max={np.nanmax(h0):.1f} m")
     save_array_as_geotiff(
         h0, 
         os.path.join(cache_dir, 'initial_head_for_viz.tif'), 
@@ -485,16 +489,16 @@ def setup_and_run_modflow(
     (335.0, 50, 1.0),
     ]
     flopy.mf6.ModflowTdis(sim, nper=2, time_units='days', perioddata=periods)
-    flopy.mf6.ModflowIms(sim, print_option='ALL', complexity='SIMPLE',
+    flopy.mf6.ModflowIms(sim, print_option='ALL', complexity='MODERATE',
                          linear_acceleration='BICGSTAB',
-                         inner_maximum=1000, inner_dvclose=1e-5,
-                         outer_maximum=500, outer_dvclose=1e-4,
-                         relaxation_factor=0.2,
+                         inner_maximum=500, inner_dvclose=1e-4,
+                         outer_maximum=200, outer_dvclose=1e-3,
+                         relaxation_factor=0.0,
                          under_relaxation='DBD',
-                         under_relaxation_theta=0.7,
-                         under_relaxation_kappa=0.1,
+                         under_relaxation_theta=0.5,
+                         under_relaxation_kappa=0.05,
                          under_relaxation_gamma=0.0,
-                         backtracking_number=10,
+                         backtracking_number=20,
                          csv_output_filerecord='ims.csv')
     gwf = flopy.mf6.ModflowGwf(
         sim,
@@ -832,8 +836,27 @@ def setup_and_run_modflow(
     )
     sim.write_simulation()
     success, _ = sim.run_simulation()
+
+    # --- Early-abort: check IMS convergence log for divergence ---
+    ims_csv = os.path.join(base_ws, 'ims.csv')
+    if os.path.exists(ims_csv):
+        try:
+            ims_df = pd.read_csv(ims_csv)
+            # Column 6 (0-indexed 5) is dvmax; column 5 (0-indexed 4) is inner_iteration
+            cols = ims_df.columns.tolist()
+            if len(cols) >= 6:
+                dvmax_col = cols[5]
+                dvmax_vals = pd.to_numeric(ims_df[dvmax_col], errors='coerce').abs()
+                max_dvmax = dvmax_vals.max()
+                last_dvmax = dvmax_vals.iloc[-1] if len(dvmax_vals) > 0 else 0
+                print(f"[IMS] worst dvmax = {max_dvmax:.2e}, final dvmax = {last_dvmax:.2e}")
+                if max_dvmax > 1e4:
+                    print(f"[IMS] WARNING: dvmax reached {max_dvmax:.2e} m — model likely diverged")
+        except Exception as e:
+            print(f"[IMS] Could not parse ims.csv: {e}")
+
     if not success:
-        raise RuntimeError("MODFLOW run failed")
+        raise RuntimeError("MODFLOW run failed — check ims.csv for convergence diagnostics")
     
     # --- quick water-budget summary (last time step) ---
     cbcfile = os.path.join(base_ws, f"gwf_{catchment_id}.cbc")
