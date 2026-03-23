@@ -18,7 +18,7 @@
 - **MODFLOW 6** executable — download from [USGS](https://www.usgs.gov/software/modflow-6-usgs-modular-hydrologic-model).  
   Pass the path via `--mf6 "path/to/mf6.exe"`.
 
-### Run a simulation
+### Run a single catchment
 
 All scripts must be run from the `scripts/` directory using `python -m`:
 
@@ -31,6 +31,42 @@ This will:
 1. Check if catchment 204 is coastal (if inland, exits — no SGD)
 2. Build a two-layer MODFLOW-6 model (soil + fractured bedrock)
 3. Run the simulation and save head maps + budget files
+
+### Run all coastal catchments (batch mode)
+
+To run every Swedish coastal catchment in a single batch:
+
+```powershell
+python -m src.core.main_sgd --catchments all --year 2010 --mf6 "path/to/mf6.exe" `
+  --data-root "C:\path\to\data\input" `
+  --output-dir "C:\path\to\data\output"
+```
+
+Or specify a comma-separated list:
+
+```powershell
+python -m src.core.main_sgd --catchments 204,301,415 --year 2010 --mf6 "path/to/mf6.exe"
+```
+
+**Batch options:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--catchments all` | Run all Swedish coastal catchments | — |
+| `--catchments 204,301` | Run specific catchments | — |
+| `--max-area 5000` | Skip catchments larger than this (km²) | 5000 |
+| `--cell-size 200` | Resample DEM to this cell size (m) | native resolution |
+
+### Resume support
+
+The batch runner saves progress to `<output-dir>/batch_results_<YEAR>.xlsx` after **every** catchment. If the run is interrupted (crash, restart, etc.), simply re-run the same command — it will:
+- Load the existing results file
+- Skip all previously successful catchments
+- Re-run only remaining and previously failed catchments
+
+You will see: `Resuming: N catchments already done — skipping them`
+
+> **Note:** If `batch_results_<YEAR>.xlsx` is open in Excel, the script cannot update it and will exit with an error. Close it before running.
 
 ### Custom data paths
 
@@ -226,7 +262,9 @@ All commands below should be run from the `scripts/` directory. Add `--data-root
 
 | Task | Command |
 |------|---------|
-| **Simulation** | `python -m src.core.main_sgd --catchment 204 --year 2010 --mf6 "path/to/mf6.exe"` |
+| **Single catchment** | `python -m src.core.main_sgd --catchment 204 --year 2010 --mf6 "path/to/mf6.exe"` |
+| **Batch (all coastal)** | `python -m src.core.main_sgd --catchments all --year 2010 --mf6 "..." --data-root "..." --output-dir "..."` |
+| **Batch (specific)** | `python -m src.core.main_sgd --catchments 204,301,415 --year 2010 --mf6 "..."` |
 | **Calibration** | `python -m src.calibration.calibration_with_figures --catchment 204 --year 2010 --mf6 "..." --maxiter 50` |
 | **Validation** | `python -m src.calibration.validation --catchment 204 --calib-year 2010 --years 2018 2019 --mf6 "..."` |
 | **Sensitivity (OAT)** | `python -m src.sensitivity.sensitivity_oat --catchment 204 --year 2010 --mf6 "..."` |

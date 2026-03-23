@@ -145,6 +145,25 @@ def load_or_interpolate_obs_heads(
     return obs_grid
 
 
+def _resample_cached(cache_path, nrow, ncol, dem_tr, dem_crs, method=Resampling.nearest):
+    """Load a cached raster and resample to model grid if shapes differ."""
+    with rasterio.open(cache_path) as src:
+        if src.height == nrow and src.width == ncol:
+            arr = src.read(1).astype(float)
+            nd = src.nodata
+            if nd is not None:
+                arr[arr == nd] = np.nan
+            return arr
+        with WarpedVRT(src, crs=dem_crs, transform=dem_tr,
+                       width=ncol, height=nrow,
+                       resampling=method) as vrt:
+            arr = vrt.read(1).astype(float)
+            nd = vrt.nodata
+            if nd is not None:
+                arr[arr == nd] = np.nan
+        return arr
+
+
 def setup_and_run_modflow(
     catchment_id: int,
     filepaths: dict[str, str],
@@ -160,6 +179,7 @@ def setup_and_run_modflow(
     rch_elev_factors: list[float] | None = None,
     rch_soil_factors: dict[int, float] | None = None,
     k_soil_factors: dict[int, float] | None = None,
+    cell_size: float | None = None,
 ) -> tuple[np.ndarray, rasterio.Affine, object, object]:
     print_time("Start setup_and_run_modflow")
 
@@ -195,7 +215,35 @@ def setup_and_run_modflow(
         with rasterio.open(dem_cache, 'w', **profile) as dst:
             dst.write(dem_img)
     dem, dem_tr, dem_crs = load_clean_tif(dem_cache)
+
+    # ── Optional grid coarsening ───────────────────────────────────────────
+    if cell_size and cell_size > dem_tr.a:
+        from rasterio.warp import Resampling as _Res
+        from rasterio.vrt import WarpedVRT
+        print_time(f"Resampling DEM from {dem_tr.a:.0f}m to {cell_size:.0f}m")
+        with rasterio.open(dem_cache) as src_dem:
+            new_width  = max(1, int(src_dem.width  * dem_tr.a / cell_size))
+            new_height = max(1, int(src_dem.height * abs(dem_tr.e) / cell_size))
+            new_tr = rasterio.transform.from_bounds(
+                *src_dem.bounds, new_width, new_height)
+            with WarpedVRT(src_dem, width=new_width, height=new_height,
+                           transform=new_tr, resampling=_Res.average) as vrt:
+                dem = vrt.read(1).astype(float)
+                nd = vrt.nodata
+                if nd is not None:
+                    dem[dem == nd] = np.nan
+        dem_tr = new_tr
+        _coarsened = True
+        print_time(f"Resampled grid: {dem.shape[0]} rows x {dem.shape[1]} cols")
+    else:
+        _coarsened = False
+
     catch_mask = ~np.isnan(dem)
+
+    # Guard: empty grid (catchment outside DEM extent or fully nodata)
+    if catch_mask.sum() == 0:
+        print(f"[SKIP] Catchment {catchment_id}: DEM clip produced zero valid cells")
+        return None, None, None, None
     
     # and *immediately* dump for viz:
     dem_viz = dem.copy()
@@ -237,7 +285,7 @@ def setup_and_run_modflow(
         sd[np.isnan(sd)] = MIN_SOIL_THICKNESS
         with rasterio.open(sd_cache, 'w', **profile) as dst:
             dst.write(sd[np.newaxis, ...])
-    sd, _, _ = load_clean_tif(sd_cache)
+    sd = _resample_cached(sd_cache, nrow, ncol, dem_tr, dem_crs, method=Resampling.nearest)
     sd_viz = sd.copy()
     sd_viz[~catch_mask] = np.nan
     save_array_as_geotiff(
@@ -349,8 +397,8 @@ def setup_and_run_modflow(
         with rasterio.open(rech_cache, 'w', **profile) as dst:
             dst.write(rech.astype(np.float32)[np.newaxis, ...])
 
-    # load & inspect
-    rech, _, _ = load_clean_tif(rech_cache)
+    # load & inspect (resample if grid was coarsened)
+    rech = _resample_cached(rech_cache, nrow, ncol, dem_tr, dem_crs, method=Resampling.average)
     print(f">>> recharge min/max: {np.nanmin(rech):.2e}, {np.nanmax(rech):.2e}")
     rech[~catch_mask] = np.nan
     save_array_as_geotiff(
@@ -412,8 +460,7 @@ def setup_and_run_modflow(
     if not os.path.exists(soil_cache):
         raise RuntimeError(f"[soil] expected {soil_cache} but it was not created.")
 
-    with rasterio.open(soil_cache) as src:
-        soil_class = src.read(1).astype(np.int16)
+    soil_class = _resample_cached(soil_cache, nrow, ncol, dem_tr, dem_crs, method=Resampling.nearest).astype(np.int16)
 
     print(f"[soil] soil_class raster dtype={soil_class.dtype}, "
         f"min={int(soil_class.min())}, max={int(soil_class.max())}")
@@ -462,7 +509,11 @@ def setup_and_run_modflow(
     
     # 6) Initial heads — start close to DEM to help Newton convergence
     print_time("Interpolating initial heads")
-    h0 = interpolate_well_heads(filepaths['wells'], [catch_poly], dem.shape, dem_tr, dem_crs, dem, year=recharge_year)
+    try:
+        h0 = interpolate_well_heads(filepaths['wells'], [catch_poly], dem.shape, dem_tr, dem_crs, dem, year=recharge_year)
+    except Exception as e:
+        print(f"[init heads] Well interpolation failed ({e}) — using DEM-based fallback")
+        h0 = None
     if h0 is None:
         h0 = dem - 5.0   # conservative: water table 5 m below ground
     h0[np.isnan(h0)] = dem[np.isnan(h0)] - 5.0   # ungauged cells: 5 m below DEM
@@ -483,7 +534,8 @@ def setup_and_run_modflow(
     print_time("Building and running MODFLOW 6 model")
     base_ws = os.path.join(filepaths['output'], f"model_runs/mf6_{catchment_id}")
     os.makedirs(base_ws, exist_ok=True)
-    sim = flopy.mf6.MFSimulation(sim_name=f"sgd_{catchment_id}", exe_name=mf6_exe, sim_ws=base_ws)
+    sim = flopy.mf6.MFSimulation(sim_name=f"sgd_{catchment_id}", exe_name=mf6_exe, sim_ws=base_ws,
+                                  continue_=True)  # continue past non-converging time steps
     periods = [
     (30.0,  30, 1.0),   # (perlen, nstp, tsmult)
     (335.0, 50, 1.0),
@@ -491,8 +543,8 @@ def setup_and_run_modflow(
     flopy.mf6.ModflowTdis(sim, nper=2, time_units='days', perioddata=periods)
     flopy.mf6.ModflowIms(sim, print_option='ALL', complexity='MODERATE',
                          linear_acceleration='BICGSTAB',
-                         inner_maximum=500, inner_dvclose=1e-4,
-                         outer_maximum=200, outer_dvclose=1e-3,
+                         inner_maximum=1000, inner_dvclose=1e-5,
+                         outer_maximum=500, outer_dvclose=1e-4,
                          relaxation_factor=0.0,
                          under_relaxation='DBD',
                          under_relaxation_theta=0.5,
@@ -504,7 +556,7 @@ def setup_and_run_modflow(
         sim,
         modelname=f"gwf_{catchment_id}",
         save_flows=True,
-        newtonoptions="UNDER_RELAXATION"  # ← enable Newton with damping
+        newtonoptions="UNDER_RELAXATION",  # Newton with damping
     )
     from scipy.ndimage import label
 
@@ -832,7 +884,7 @@ def setup_and_run_modflow(
     flopy.mf6.ModflowGwfoc(gwf,
         head_filerecord=f"gwf_{catchment_id}.hds",
         budget_filerecord=f"gwf_{catchment_id}.cbc",
-        saverecord=[('HEAD','LAST'), ('BUDGET','ALL')]
+        saverecord=[('HEAD','ALL'), ('BUDGET','ALL')]
     )
     sim.write_simulation()
     success, _ = sim.run_simulation()
@@ -856,7 +908,13 @@ def setup_and_run_modflow(
             print(f"[IMS] Could not parse ims.csv: {e}")
 
     if not success:
-        raise RuntimeError("MODFLOW run failed — check ims.csv for convergence diagnostics")
+        # Check if results exist anyway (CONTINUE mode may have pushed through)
+        hds_path = os.path.join(base_ws, f"gwf_{catchment_id}.hds")
+        if os.path.exists(hds_path) and os.path.getsize(hds_path) > 0:
+            print("[WARNING] MODFLOW reported convergence failure but produced output — continuing with results")
+        else:
+            print(f"[FAIL] Catchment {catchment_id}: MODFLOW run failed with no output")
+            return None, None, None, catch_poly
     
     # --- quick water-budget summary (last time step) ---
     cbcfile = os.path.join(base_ws, f"gwf_{catchment_id}.cbc")
@@ -889,6 +947,9 @@ def setup_and_run_modflow(
     print_time("Reading final heads")
 
     hfile = os.path.join(base_ws, f"gwf_{catchment_id}.hds")
+    if not os.path.exists(hfile) or os.path.getsize(hfile) == 0:
+        print(f"[FAIL] Catchment {catchment_id}: Head file is empty or missing")
+        return None, None, None, catch_poly
     hf = flopy.utils.HeadFile(hfile)
     times = hf.get_times()
     heads3d = hf.get_data(totim=times[-1]).astype(float)  # shape (nlay, nrow, ncol)
