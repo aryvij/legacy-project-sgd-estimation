@@ -1,0 +1,22 @@
+# Core dependencies
+flopy
+rasterio
+geopandas
+scipy
+numpy
+pandas
+matplotlib
+shapely
+openpyxl
+
+# Optional — sensitivity analysis
+SALib
+
+# Optional — web interface
+streamlit
+
+# Optional — 3D visualisation
+plotly
+
+# Optional — preprocessing (NetCDF/multidim arrays)
+xarray

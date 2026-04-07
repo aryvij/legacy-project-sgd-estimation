@@ -11,9 +11,14 @@
 
 - **Python 3.10+** with the following packages:
   ```
-  flopy rasterio geopandas scipy numpy pandas matplotlib shapely
+  flopy rasterio geopandas scipy numpy pandas matplotlib shapely openpyxl
   ```
-  Optional: `SALib` (sensitivity analysis), `streamlit` (web UI)
+  Optional: `SALib` (sensitivity analysis), `streamlit` (web UI), `plotly` (3D visualisation), `xarray` (preprocessing)
+
+  Or install all at once:
+  ```
+  pip install -r requirements.txt
+  ```
 
 - **MODFLOW 6** executable — download from [USGS](https://www.usgs.gov/software/modflow-6-usgs-modular-hydrologic-model).  
   Pass the path via `--mf6 "path/to/mf6.exe"`.
@@ -208,10 +213,12 @@ python -m src.calibration.calibration_with_figures --catchment 204 --year 2010 -
 
 ## SGD Extraction
 
-SGD is extracted as **GHB outflows** (negative q in the cell-budget file):
+SGD is extracted as **GHB outflows** (negative q in the cell-budget file). `sgd_post.py` is a library module — call it from Python:
 
-```powershell
-python -m src.diagnostics.sgd_post --cbc "data/output/model_runs/mf6_204/gwf_204.cbc"
+```python
+from src.diagnostics.sgd_post import extract_sgd_from_cbc
+
+sgd_m3_per_day = extract_sgd_from_cbc("data/output/model_runs/mf6_204/gwf_204.cbc")
 ```
 
 ---
@@ -254,6 +261,16 @@ Input data lives outside this repository (not version-controlled due to size). P
 
 6. **Running scripts:** Always run from the `scripts/` directory using `python -m src.<module>`. The `src/__init__.py` sets up `sys.path` so that internal `from core.…` imports resolve correctly.
 
+7. **Hardcoded MF6 path in Streamlit UI:** `interface_main_sgd.py` (line ~211) has a hardcoded MODFLOW 6 path. Edit it directly to match your local installation.
+
+8. **Preprocessing scripts have hardcoded paths:** Files in `src/Preprocessing/` (e.g., `year_selection.py`, `clipping_coast_line.py`) contain absolute paths from the original developer's machine. Update these paths before running preprocessing.
+
+9. **Environment variables:**
+   - `FORCE_RECHARGE_REBUILD=1` — forces recharge raster recalculation (ignores cache)
+   - `GDAL_CACHEMAX` / `RASTERIO_MAXIMUM_RAM` — set automatically by sensitivity scripts to limit memory usage
+
+10. **`sgd_post.py` is a library module**, not a CLI script. Import and call `extract_sgd_from_cbc(cbc_path)` from Python.
+
 ---
 
 ## Command Reference
@@ -267,11 +284,14 @@ All commands below should be run from the `scripts/` directory. Add `--data-root
 | **Batch (specific)** | `python -m src.core.main_sgd --catchments 204,301,415 --year 2010 --mf6 "..."` |
 | **Calibration** | `python -m src.calibration.calibration_with_figures --catchment 204 --year 2010 --mf6 "..." --maxiter 50` |
 | **Validation** | `python -m src.calibration.validation --catchment 204 --calib-year 2010 --years 2018 2019 --mf6 "..."` |
-| **Sensitivity (OAT)** | `python -m src.sensitivity.sensitivity_oat --catchment 204 --year 2010 --mf6 "..."` |
+| **Sensitivity (OAT)** | `python -m src.sensitivity.sensitivity_oat --catchment 204 --year 2010 --mf6 "..." --params "path/to/calibrated_params.json"` |
 | **Sensitivity (Sobol)** | `python -m src.sensitivity.sensitivity_sobol --catchment 204 --year 2010 --mf6 "..."` |
 | **Uncertainty (MC)** | `python -m src.sensitivity.uncertainty_mc --catchment 204 --year 2010 --mf6 "..."` |
-| **Diagnostics** | `python -m src.diagnostics.diagnostics --data-root "..." --output-dir "..."` |
-| **SGD extraction** | `python -m src.diagnostics.sgd_post --cbc "data/output/model_runs/mf6_204/gwf_204.cbc"` |
+| **Diagnostics** | `python -m src.diagnostics.diagnostics --catchment 204 --year 2010 --data-root "..." --output-dir "..."` |
+| **SGD extraction** | Use `from src.diagnostics.sgd_post import extract_sgd_from_cbc` in Python (no CLI) |
+| **Plot OAT results** | `python -m src.plotting.plot_oat_results --csv "path/to/oat_sensitivity.csv"` |
+| **Plot Sobol indices** | `python -m src.plotting.plot_sobol_dual --json2018 "..." --json2019 "..." --out "sobol.png"` |
+| **Plot MC violins** | `python -m src.plotting.plot_uncertainty_violin --csv2018 "..." --csv2019 "..." --outdir "..."` |
 | **Web UI** | `streamlit run src/interface_main_sgd.py` |
 
 ---
