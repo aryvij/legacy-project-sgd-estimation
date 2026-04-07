@@ -21,12 +21,6 @@ from flopy.mf6.modflow.mfgwfdrn import ModflowGwfdrn
 from scipy.ndimage import distance_transform_edt
 
 
-
-
-from rasterio.vrt import WarpedVRT
-from rasterio.enums import Resampling
-
-
 print("[modflow_setup] using file:", __file__)
 import inspect
 print("[modflow_setup] rasterize ref:", inspect.getsource(rasterize)[:60], "...")
@@ -219,7 +213,6 @@ def setup_and_run_modflow(
     # ── Optional grid coarsening ───────────────────────────────────────────
     if cell_size and cell_size > dem_tr.a:
         from rasterio.warp import Resampling as _Res
-        from rasterio.vrt import WarpedVRT
         print_time(f"Resampling DEM from {dem_tr.a:.0f}m to {cell_size:.0f}m")
         with rasterio.open(dem_cache) as src_dem:
             new_width  = max(1, int(src_dem.width  * dem_tr.a / cell_size))
